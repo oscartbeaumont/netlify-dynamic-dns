@@ -7,4 +7,4 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o netlify-d
 
 FROM oscartbeaumont/scratch
 COPY --from=builder /go/src/github.com/oscartbeaumont/netlify-dynamic-dns/netlify-dynamic-dns /
-CMD ["/netlify-dynamic-dns"]
+ENTRYPOINT ["/netlify-dynamic-dns"]
