@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -12,14 +14,24 @@ import (
 )
 
 var (
-	flgDomain      = flag.String("domain", os.Getenv("DOMAIN"), "your domain name. eg. 'example.com'")
-	flgHost        = flag.String("host", os.Getenv("HOST"), "the record name. eg. 'home'")
-	flgAccessToken = flag.String("access-token", os.Getenv("ACCESS_TOKEN"), "the authentication token for the Netlify API.")
-	flgInterval    = flag.Int("interval", 5, "the time in minutes between checking for DNS changes. Default is 5 minutes.")
+	flgDomain          = flag.String("domain", os.Getenv("DOMAIN"), "your domain name. eg. 'example.com'")
+	flgHost            = flag.String("host", os.Getenv("HOST"), "the record name. eg. 'home'")
+	flgAccessToken     = flag.String("access-token", os.Getenv("ACCESS_TOKEN"), "the authentication token for the Netlify API.")
+	flgAccessTokenFile = flag.String("access-token-file", os.Getenv("ACCESS_TOKEN_FILE"), "a file on disk that contains the access token.")
+	flgInterval        = flag.Int("interval", 5, "the time in minutes between checking for DNS changes. Default is 5 minutes.")
 )
 
 func main() {
 	flag.Parse()
+
+	if *flgAccessTokenFile != "" {
+		f, err := ioutil.ReadFile(*flgAccessTokenFile)
+		if err != nil {
+			log.Println("Error Reading The Access Token File.", err)
+		}
+
+		*flgAccessToken = string(f)
+	}
 
 	if *flgDomain == "" || *flgHost == "" || *flgAccessToken == "" {
 		fmt.Println("You are required to set the domain, host and access_token. Refer to './netlify-dynamic-dns -help' for more information!")
@@ -115,6 +127,7 @@ func newHTTPClient() *http.Client {
 				Timeout: 5 * time.Second,
 			}).Dial,
 			TLSHandshakeTimeout: 5 * time.Second,
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
 		},
 	}
 }

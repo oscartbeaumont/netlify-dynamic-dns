@@ -9,14 +9,14 @@ You can easily deploy this application in a Docker container using the following
 ```bash
 docker run -e DOMAIN=example.com -e HOST=home -e ACCESS_TOKEN={Personal Access Token} oscartbeaumont/netlify-dynamic-dns:latest
 ```
-You will need to replace the `{Personal Access Token}` and the domain `example.com` with your access token and domain. With the options used in this example your public IP will be mapped to the domain `home.example.com`.
+You will need to replace the `{Personal Access Token}` and the domain `example.com` with your access token and domain. With the options used in this example your public IP will be mapped to the domain `home.example.com`. Alternatively you can parse an `ACCESS_TOKEN_FILE` which is the path to a file on disk that contains the access token (this is great for Docker Swarm secrets).
 
 ## Using the Binary
 Download The Binary From The [Github Releases](https://github.com/oscartbeaumont/netlify-dynamic-dns/releases) and use the following command:
 ```bash
-./netlify-dynamic-dns -domain example.com -host home -access_token {Personal Access Token}
+./netlify-dynamic-dns -domain example.com -host home -access-token {Personal Access Token}
 ```
-For more information & options about the argument you can use with the command run: `./netlify-dynamic-dns -help`.
+For more information & options about the argument you can use with the command run: `./netlify-dynamic-dns -help`. Alternatively you can parse an `-access-token-file` which is the path to a file on disk that contains the access token.
 
 # How To Compile
 Even though unnecessary in most cases you can compile the source by using the commands below.
