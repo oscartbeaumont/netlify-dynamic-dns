@@ -1,30 +1,64 @@
 # Netlify Dynamic DNS
-A dynamic DNS client for [Netlify's Managed DNS](https://www.netlify.com/docs/dns/) service. Every 5 minutes (configurable) the application will (using [ident.me](https://ident.me)) determine the server's public IPv4 and IPv6 address and check to see if they match the address's currently in the Netlify A and AAAA DNS records. If they do not match the existing values the values will be update. If duplicate DNS entries are detected the duplicates will be removed.
 
-## Access Token
-To use this application you must first get an access token from Netlify. This allows the application to talk to the Netlify API on behalf of your account. To do that go to the [Netlify OAuth applications](https://app.netlify.com/account/applications) page and create a new "Personal access token".
+[![Go Report Card](https://goreportcard.com/badge/github.com/oscartbeaumont/netlify-dynamic-dns)](https://goreportcard.com/report/github.com/oscartbeaumont/netlify-dynamic-dns)
 
-## Using the Docker Container
-You can easily deploy this application in a Docker container using the following command:
+A dynamic DNS client for [Netlify's Managed DNS](https://www.netlify.com/docs/dns/) service. It is a simple command line tool that retrieves your public IP and sets it to a DNS record using the Netlify API.
+
+## Installation
+
+[Click Here](https://github.com/oscartbeaumont/netlify-dynamic-dns/releases) to go to the Github Releases and download the correct installer for your platform. Alternatively, it can be run using Docker.
+
 ```bash
-docker run -e DOMAIN=example.com -e HOST=home -e ACCESS_TOKEN={Personal Access Token} oscartbeaumont/netlify-dynamic-dns:latest
+docker run oscartbeaumont/netlify-dynamic-dns:latest updater --access-token={Personal Access Token}
 ```
-You will need to replace the `{Personal Access Token}` and the domain `example.com` with your access token and domain. With the options used in this example your public IP will be mapped to the domain `home.example.com`. Alternatively you can parse an `ACCESS_TOKEN_FILE` which is the path to a file on disk that contains the access token (this is great for Docker Swarm secrets).
 
-## Using the Binary
-Download The Binary From The [Github Releases](https://github.com/oscartbeaumont/netlify-dynamic-dns/releases) and use the following command:
-```bash
-./netlify-dynamic-dns -domain example.com -host home -access-token {Personal Access Token}
-```
-For more information & options about the argument you can use with the command run: `./netlify-dynamic-dns -help`. Alternatively you can parse an `-access-token-file` which is the path to a file on disk that contains the access token.
+## Usage
 
-# How To Compile
-Even though unnecessary in most cases you can compile the source by using the commands below.
-To build the docker image you need [Docker](https://docker.com) installed on your system. To build the docker version use the following command:
+Netlify Dynamic DNS has two modes it can be used in. When calling the binary use the following format.
+
 ```bash
-docker build -t oscartbeaumont/netlify-dynamic-dns .
+netlify-ddns [MODE] [FLAGS]
 ```
-To compile the binary you need [Go Lang](https://golang.org) installed on your system. To compile the binary version use the following command:
+
+### Update Mode
+
+In update mode, the dynamic DNS will run once and then exit. This is good for use with a cron job or when you just want to manually update the DNS record.
+
 ```bash
-env GOOS=linux GOARCH=amd64 go build -o netlify-dynamic-dns ./cmd
+netlify-ddns update --access-token={Personal Access Token}
+```
+
+### Updater Mode
+
+In updater mode, the dynamic DNS will automatically update on an interval. This will continue until the application is terminated. This is good for running in a daemon.
+
+```bash
+netlify-ddns updater --access-token={Personal Access Token}
+```
+
+### Flags
+
+| Flag         | Default     | Description                                                                                                              |
+| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| access-token |             | The personal access tokens for your Netlify accounts. Can be created in 'User Settings > Applications' on the dashboard. |
+| domain       | example.com | The full domain for the DNS record                                                                                       |
+| subdomain    | home        | The subdomain segment for the DNS record.                                                                                |
+| ipv6         | true        | Whether the IPv6 'AAAA' DNS record should be updated.                                                                    |
+| interval     | 5           | The interval (in minutes) to update your DNS record in the updater mode.                                                 |
+
+### Netlify Access Token
+
+To use this application you must first get an access token from Netlify. This allows the application to talk to the Netlify API on behalf of your account. To do that please go to the [Netlify OAuth applications](https://app.netlify.com/account/applications) page and create a new `Personal access token`.
+
+## How It Works
+
+Netlify Dynamic DNS uses [ident.me](https://ident.me) to determine the public IPv4 and IPv6 of the server and then talks to the Netlify API to create an A and AAAA record for those addresses. If duplicate DNS entries are detected they will be removed.
+
+## Contributing
+
+To work on the codebase, use the following commands.
+
+```bash
+git clone https://github.com/oscartbeaumont/netlify-dynamic-dns.git
+go run ./cmd
 ```
