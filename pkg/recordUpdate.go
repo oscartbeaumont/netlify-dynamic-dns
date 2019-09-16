@@ -4,8 +4,8 @@ package pkg
 func UpdateRecord(domain string, accessToken string, record DNSRecord, records []DNSRecord) error {
 	correctRecordExists := false
 	for _, r := range records {
-		if r.Type == record.Type {
-			if r.Name == record.Name && r.Value == record.Value+"."+domain && !correctRecordExists {
+		if r.Type == record.Type && r.Name == record.Name {
+			if r.Value == record.Value+"."+domain {
 				correctRecordExists = true
 			} else {
 				DeleteRecord(domain, accessToken, r)
