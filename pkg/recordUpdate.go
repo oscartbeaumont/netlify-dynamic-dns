@@ -1,13 +1,17 @@
 package pkg
 
+import (
+	"strings"
+)
+
 // UpdateRecord will find all current records and removes them if they are not valid. If no valid records are found it will create a new one.
 func UpdateRecord(domain string, accessToken string, record DNSRecord, records []DNSRecord) error {
 	correctRecordExists := false
 	for _, r := range records {
-		if r.Type == record.Type {
-			if r.Name == record.Name && r.Value == record.Value+"."+domain && !correctRecordExists {
+		if r.Type == record.Type && strings.TrimSuffix(r.Name, "."+domain) == record.Name { // If record has the correct type and name
+			if r.Value == record.Value { // If the record contains the correct value set correctRecordExists to true
 				correctRecordExists = true
-			} else {
+			} else { // Else delete the record due to the incorrect value
 				DeleteRecord(domain, accessToken, r)
 			}
 		}
