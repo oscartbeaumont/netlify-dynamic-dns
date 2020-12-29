@@ -67,7 +67,7 @@ func TestInvalidArguments(t *testing.T) {
 
 // TestNormal tests the normal functionality of the project including TTL passthrough, multirecord based issues, subsubdomains
 func TestNormal(t *testing.T) {
-	// Create existing record 'nddns-test-01' with wierd TTL to test passthrough
+	// Create existing record 'nddns-test-01' with weird TTL to test passthrough
 	for _, record := range [][]string{{"A", "0.0.0.0"}, {"AAAA", "0000:0000:0000:0000:0000:0000:0000:0000"}} {
 		createparams := operations.NewCreateDNSRecordParams()
 		createparams.ZoneID = args.zoneID
