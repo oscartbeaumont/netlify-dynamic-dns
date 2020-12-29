@@ -1,7 +1,7 @@
 package main
 
 // Version contains the builds version. It is injected at build time
-const Version = "v0.0.0-dev"
+var Version = "v0.0.0-dev"
 
 // Arguments stores the configuration which is determined from the command line arguments or environment varibles
 type Arguments struct {

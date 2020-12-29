@@ -10,3 +10,5 @@ require (
 	github.com/miekg/dns v1.1.35
 	github.com/netlify/open-api v1.1.0
 )
+
+replace github.com/janeczku/go-spinner => github.com/dmolesUC/go-spinner v0.0.0-20190903171623-0c332afb0926
