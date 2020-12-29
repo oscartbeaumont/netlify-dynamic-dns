@@ -1,64 +1,54 @@
-# Netlify Dynamic DNS
+<h1 align="center">Netlify Dynamic DNS</h1>
+<p align="center">
+    <img width="80%" src=".github/usage.gif"></img>
+</p>
+<p align="center">
+    A simple command line tool for updating a <a href="https://www.netlify.com/docs/dns/">Netlify's Managed DNS</a> record to point at your public IP address. Supporting both IPv4 and IPv6.
+    <br />
+    <br />
+    <a href="https://goreportcard.com/report/github.com/oscartbeaumont/netlify-dynamic-dns"><img src="https://goreportcard.com/badge/github.com/oscartbeaumont/netlify-dynamic-dns"></img></a>
+    <a href="https://paypal.me/oscartbeaumont" style="padding-left: 10px;"><img src="https://img.shields.io/badge/Donate-PayPal-green.svg"></img></a>
+</p>
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/oscartbeaumont/netlify-dynamic-dns)](https://goreportcard.com/report/github.com/oscartbeaumont/netlify-dynamic-dns)
-
-A dynamic DNS client for [Netlify's Managed DNS](https://www.netlify.com/docs/dns/) service. It is a simple command line tool that retrieves your public IP and sets it to a DNS record using the Netlify API.
-
-## Installation
-
-[Click Here](https://github.com/oscartbeaumont/netlify-dynamic-dns/releases) to go to the Github Releases and download the correct installer for your platform. Alternatively, it can be run using Docker.
-
-```bash
-docker run oscartbeaumont/netlify-dynamic-dns:latest updater --access-token={Personal Access Token}
-```
-
-## Usage
-
-Netlify Dynamic DNS has two modes it can be used in. When calling the binary use the following format.
+## Installation & Usage
 
 ```bash
-netlify-ddns [MODE] [FLAGS]
+# Install via script
+curl -s -L https://raw.githubusercontent.com/oscartbeaumont/netlify-dynamic-dns/master/install.sh | sudo sh
+
+# Set home.example.com to your public IP and quit
+nddns -accesstoken xxx -zone example.com -record home
+
+# Set home.example.com to your pulbic IP every 5 minutes
+nddns -accesstoken xxx -zone example.com -record home -interval 5
+
+# Using Docker
+docker run ghcr.io/oscartbeaumont/netlify-dynamic-dns:latest -accesstoken xxx -zone example.com -record home -interval 5
+
+# From Git
+git clone https://github.com/oscartbeaumont/netlify-dynamic-dns.git
+cd netlify-dynamic-dns
+go run ./cmd -accesstoken xxx -zone example.com -record home
 ```
 
-### Update Mode
+## Configuration
 
-In update mode, the dynamic DNS will run once and then exit. This is good for use with a cron job or when you just want to manually update the DNS record.
+| Flag         | Environment Variable | Default     | Description                                                                                                |
+|--------------|----------------------|-------------|------------------------------------------------------------------------------------------------------------|
+| access-token | NDDNS_ACCESS_TOKEN   |             | Your Netlify personal access token. Can be created at [here](https://app.netlify.com/account/applications) |
+| zone         | NDDNS_ZONE           | example.com | The Netlify DNS zone domain name                                                                           |
+| record       | NDDNS_RECORD         | home        | The record in the DNS zone to set as your public IP                                                        |
+| ipv6         | NDDNS_IPv6_ENABLED   | true        | Whether the IPv6 record (AAAA) should also be updated                                                      |
+| interval     | NDDNS_INTERVAL       | 0           | The amount of minutes between sending updates. If 0 only a single update is done.                          |
 
-```bash
-netlify-ddns update --access-token={Personal Access Token}
-```
+If you would like a custom TTL value, create an existing record (you can set anything in the IP field) and then the application will use it when recreating the record.
 
-### Updater Mode
+## Analytics
 
-In updater mode, the dynamic DNS will automatically update on an interval. This will continue until the application is terminated. This is good for running in a daemon.
+This application has analytics built in which is used to help the developers make a better product. Simple Analytics was chosen due to their strong views on protecting the privacy of users. They are also GDPR, CCPA, & PECR compliant. The data collected can be viewed by anyone by clicking the badge below.
 
-```bash
-netlify-ddns updater --access-token={Personal Access Token}
-```
-
-### Flags
-
-| Flag         | Default     | Description                                                                                                              |
-| ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------ |
-| access-token |             | The personal access tokens for your Netlify accounts. Can be created in 'User Settings > Applications' on the dashboard. |
-| domain       | example.com | The full domain for the DNS record                                                                                       |
-| subdomain    | home        | The subdomain segment for the DNS record.                                                                                |
-| ipv6         | true        | Whether the IPv6 'AAAA' DNS record should be updated.                                                                    |
-| interval     | 5           | The interval (in minutes) to update your DNS record in the updater mode.                                                 |
-
-### Netlify Access Token
-
-To use this application you must first get an access token from Netlify. This allows the application to talk to the Netlify API on behalf of your account. To do that please go to the [Netlify OAuth applications](https://app.netlify.com/account/applications) page and create a new `Personal access token`.
+<a href="https://simpleanalytics.com/nddns.app.otbeaumont.me?utm_source=nddns.app.otbeaumont.me&utm_content=badge" referrerpolicy="origin" target="_blank"><img src="https://simpleanalyticsbadge.com/nddns.app.otbeaumont.me?radius=10" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" /></a>
 
 ## How It Works
 
-Netlify Dynamic DNS uses [ident.me](https://ident.me) to determine the public IPv4 and IPv6 of the server and then talks to the Netlify API to create an A and AAAA record for those addresses. If duplicate DNS entries are detected they will be removed.
-
-## Contributing
-
-To work on the codebase, use the following commands.
-
-```bash
-git clone https://github.com/oscartbeaumont/netlify-dynamic-dns.git
-go run ./cmd
-```
+Netlify Dynamic DNS uses the [OpenDNS](https://www.opendns.com) resolver to determine your public IP. The resolver has a feature which echoes the clients IP address when you lookup `myip.opendns.com`. This lookup is done both over IPv4 and IPv6 to determine both public IP's then using the [Netlify OpenAPI Client](https://github.com/netlify/open-api) the old DNS records are removed and new ones are created with your latest public IP.
