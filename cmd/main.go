@@ -58,8 +58,7 @@ func main() {
 
 		if err != nil {
 			log.Println(Red + "Error: Error Updating DNS Record " + err.Error() + Reset)
-		}
-		if args.Interval == 0 {
+		} else if args.Interval == 0 {
 			log.Println(Green + "DNS records updated successfully." + Reset + "")
 			forBreak = false
 		} else {
