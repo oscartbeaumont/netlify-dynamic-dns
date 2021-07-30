@@ -67,3 +67,7 @@ jobs:
         run: docker build --build-arg VERSION="${GITHUB_REF#refs/tags/}" -t "ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF#refs/tags/}" .
       - name: Push
         run: docker push "ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF#refs/tags/}"
+      - name: Tag Latest
+        run: docker tag "ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF#refs/tags/}" "ghcr.io/${GITHUB_REPOSITORY}:latest"
+      - name: Push Latest
+        run: docker push "ghcr.io/${GITHUB_REPOSITORY}:latest"
