@@ -36,10 +36,11 @@ func TestMain(m *testing.M) {
 	if myIPv4, err = ipProvider.GetIPv4(); err != nil {
 		log.Fatalln("error retrieving your public ipv4 address: %w", err)
 	}
-	if myIPv6, err = ipProvider.GetIPv6(); err != nil {
-		log.Fatalln("error retrieving your public ipv6 address: %w", err)
+	if os.Getenv("NDDNS_IPv6_ENABLED") != "false" {
+		if myIPv6, err = ipProvider.GetIPv6(); err != nil {
+			log.Fatalln("error retrieving your public ipv6 address: %w", err)
+		}
 	}
-
 	code := m.Run()
 	os.Setenv("NDDNS_DISABLE_ANALYTICS", "")
 	os.Exit(code)
@@ -148,13 +149,14 @@ func TestNormal(t *testing.T) {
 
 		if !foundA {
 			t.Fatalf("error 'A' record was not found for domain '%v'", recordHostname)
-		} else if !foundAAAA {
+		} else if myIPv6 != "" && !foundAAAA {
 			t.Fatalf("error 'AAAA' record was not found for domain '%v'", recordHostname)
 		}
 	}
 
 	// Cleanup
 	for _, record := range recordsToRemove {
+		t.Log(record.Hostname)
 		deleteparams := operations.NewDeleteDNSRecordParams()
 		deleteparams.ZoneID = record.DNSZoneID
 		deleteparams.DNSRecordID = record.ID

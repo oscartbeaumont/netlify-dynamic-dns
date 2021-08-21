@@ -22,8 +22,12 @@ import (
 var args Arguments
 var netlify = porcelain.NewRetryable(porcelain.Default.Transport, nil, porcelain.DefaultRetryAttempts)
 var netlifyAuth = runtime.ClientAuthInfoWriterFunc(func(r runtime.ClientRequest, _ strfmt.Registry) error {
-	r.SetHeaderParam("User-Agent", "NetlifyDDNS")
-	r.SetHeaderParam("Authorization", "Bearer "+args.AccessToken)
+	if err := r.SetHeaderParam("User-Agent", "NetlifyDDNS"); err != nil {
+		return err
+	}
+	if err := r.SetHeaderParam("Authorization", "Bearer "+args.AccessToken); err != nil {
+		return err
+	}
 	return nil
 })
 var ipProvider publicip.Provider = publicip.OpenDNSProvider{}
