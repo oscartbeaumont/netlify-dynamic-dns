@@ -1,0 +1,31 @@
+# GitHub Actions Workflow for Continuous Integration
+# The repository must be configured with secrets NDDNS_TEST_ZONE and NDDNS_TEST_ACCESS_TOKEN for propper function of the tests.
+
+name: CI
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+      - name: Go Installation Information
+        run: go version
+      - name: Build Binary
+        run: go build -o nddns ./cmd
+      - name: Run Tests
+        run: go test ./cmd
+    env:
+      NDDNS_IPv6_ENABLED: false # Note: GitHub Actions does not yet support IPv6 so this has been disabled.
+      NDDNS_TEST_ZONE: ${{ secrets.NDDNS_TEST_ZONE }}
+      NDDNS_TEST_ACCESS_TOKEN: ${{ secrets.NDDNS_TEST_ACCESS_TOKEN }}

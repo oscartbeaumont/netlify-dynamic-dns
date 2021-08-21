@@ -1,0 +1,52 @@
+# GitHub Actions Workflow for Releasing Changes
+# The repository must be configured with read & write access to the GitHub Package that is being published
+
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+      - name: Go Installation Information
+        run: go version
+      - name: Authenticate with Container registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Binaries
+        run: |
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/}" -o nddns_linux ./cmd
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/}" -o nddns_linux_arm64 ./cmd
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/}" -o nddns_darwin ./cmd
+          GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/}" -o nddns_windows ./cmd
+      - name: Docker - Build Image
+        run: docker build --build-arg VERSION="${GITHUB_REF#refs/tags/}" -t "ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF#refs/tags/}" .
+      - name: GitHub - Publish Binaries to Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            nddns_linux
+            nddns_linux_arm64
+            nddns_darwin
+            nddns_windows
+      - name: Docker - Push Image
+        run: docker push "ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF#refs/tags/}"
+      - name: Docker - Tag Image as Latest
+        run: docker tag "ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF#refs/tags/}" "ghcr.io/${GITHUB_REPOSITORY}:latest"
+      - name: Docker - Push Latest Tag
+        run: docker push "ghcr.io/${GITHUB_REPOSITORY}:latest"
