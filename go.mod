@@ -8,7 +8,7 @@ require (
 	github.com/go-openapi/strfmt v0.20.1
 	github.com/janeczku/go-spinner v0.0.0-20150530144529-cf8ef1d64394
 	github.com/miekg/dns v1.1.43
-	github.com/netlify/open-api v1.1.0
+	github.com/netlify/open-api v1.4.0
 )
 
 replace github.com/janeczku/go-spinner => github.com/dmolesUC/go-spinner v0.0.0-20190903171623-0c332afb0926
