@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const analyticsReportEndpoint = "https://analytics.otbeaumont.me/event"
+const analyticsReportEndpoint = "https://plausible.otbeaumont.me/api/event"
 
 var client = &http.Client{
 	Timeout: time.Second * 10,
@@ -33,7 +33,9 @@ func Report(version string) error {
 	}
 
 	var body = map[string]interface{}{
+		"name":     "pageview",
 		"url":      "https://nddns.app.otbeaumont.me/" + version,
+		"domain":   "nddns.app.otbeaumont.me",
 		"referrer": runtime.GOOS,
 	}
 
@@ -53,7 +55,7 @@ func Report(version string) error {
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("error posting analytics event: %w", err)
-	} else if resp.StatusCode != http.StatusCreated {
+	} else if resp.StatusCode != http.StatusAccepted {
 		return fmt.Errorf("error reported status %v with analytics event", resp.StatusCode)
 	}
 
