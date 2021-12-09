@@ -43,12 +43,6 @@ go run ./cmd -accesstoken xxx -zone example.com -record home
 
 If you would like a custom TTL value, create an existing record (you can set anything in the IP field) and then the application will use it when recreating the record.
 
-## Analytics
-
-This application has analytics built in which is used to help the developers make a better product. Simple Analytics was chosen due to their strong views on protecting the privacy of users. They are also GDPR, CCPA, & PECR compliant. The data collected can be viewed by anyone by clicking the badge below.
-
-<a href="https://simpleanalytics.com/nddns.app.otbeaumont.me?utm_source=nddns.app.otbeaumont.me&utm_content=badge" referrerpolicy="origin" target="_blank"><img src="https://simpleanalyticsbadge.com/nddns.app.otbeaumont.me?radius=10" loading="lazy" referrerpolicy="no-referrer" crossorigin="anonymous" /></a>
-
 ## How It Works
 
 Netlify Dynamic DNS uses the [OpenDNS](https://www.opendns.com) resolver to determine your public IP. The resolver has a feature which echoes the clients IP address when you lookup `myip.opendns.com`. This lookup is done both over IPv4 and IPv6 to determine both public IP's then using the [Netlify OpenAPI Client](https://github.com/netlify/open-api) the old DNS records are removed and new ones are created with your latest public IP.
