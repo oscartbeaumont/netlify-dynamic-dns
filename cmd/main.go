@@ -33,20 +33,20 @@ var netlifyAuth = runtime.ClientAuthInfoWriterFunc(func(r runtime.ClientRequest,
 var ipProvider publicip.Provider = publicip.OpenDNSProvider{}
 
 func main() {
-    validation := arg.MustParse(&args)
+	validation := arg.MustParse(&args)
 	args.zoneID = strings.ReplaceAll(args.Zone, ".", "_")
 
-    if args.UpdateRootRecord == false && args.Record == "" {
-        validation.Fail("Either --record or --updaterootrecord must be provided")
-    }
+	if args.UpdateRootRecord == false && args.Record == "" {
+		validation.Fail("Either --record or --updaterootrecord must be provided")
+	}
 
-    if args.UpdateRootRecord {
-        args.recordHostname = args.Zone
-    } else {
-	    args.recordHostname = args.Record + "." + args.Zone
-    }
+	if args.UpdateRootRecord {
+		args.recordHostname = args.Zone
+	} else {
+		args.recordHostname = args.Record + "." + args.Zone
+	}
 
-    fmt.Println(args.recordHostname)
+	fmt.Println(args.recordHostname)
 
 	var lastAnalyticsReport time.Time
 	var forBreak = true
@@ -116,7 +116,7 @@ func doUpdate() error {
 	var existingAAAARecord *models.DNSRecord
 	for _, record := range resp.Payload {
 		if record.Hostname == args.recordHostname {
-            fmt.Println("\n", record.Hostname, " ", record.Type)
+			fmt.Println("\n", record.Hostname, " ", record.Type)
 			if record.Type == "A" {
 				existingARecord = record
 			} else if record.Type == "AAAA" {
