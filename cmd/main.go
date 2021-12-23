@@ -46,8 +46,6 @@ func main() {
 		args.recordHostname = args.Record + "." + args.Zone
 	}
 
-	fmt.Println(args.recordHostname)
-
 	var lastAnalyticsReport time.Time
 	var forBreak = true
 	for forBreak {
@@ -116,7 +114,6 @@ func doUpdate() error {
 	var existingAAAARecord *models.DNSRecord
 	for _, record := range resp.Payload {
 		if record.Hostname == args.recordHostname {
-			fmt.Println("\n", record.Hostname, " ", record.Type)
 			if record.Type == "A" {
 				existingARecord = record
 			} else if record.Type == "AAAA" {
