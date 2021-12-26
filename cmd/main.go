@@ -36,7 +36,7 @@ func main() {
 	validation := arg.MustParse(&args)
 	args.zoneID = strings.ReplaceAll(args.Zone, ".", "_")
 
-	if args.UpdateRootRecord == false && args.Record == "" {
+	if !args.UpdateRootRecord && args.Record == "" {
 		validation.Fail("Either --record or --updaterootrecord must be provided")
 	}
 
