@@ -10,7 +10,7 @@ type Arguments struct {
 	Record           string `placeholder:"\"home\"" arg:"env:NDDNS_RECORD" help:"The record in the DNS zone to set as your public IP"`
 	IPv6             bool   `default:"true" arg:"env:NDDNS_IPv6_ENABLED" help:"Whether the IPv6 record (AAAA) should also be updated."`
 	Interval         int    `placeholder:"5" arg:"env:NDDNS_INTERVAL" help:"The amount of minutes between sending updates. If 0 only a single update is done."`
-	UpdateRootRecord bool   `placeholder:"false" arg:"env:NDDNS_IS_ROOT" help:"Use to update the root record instead of a subdomain"`
+	UpdateRootRecord bool   `placeholder:"false" arg:"env:NDDNS_UPDATE_ROOT_RECORD" help:"Use to update the root record instead of a subdomain"`
 	zoneID           string `arg:"-"`
 	recordHostname   string `arg:"-"`
 }
