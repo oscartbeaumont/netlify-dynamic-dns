@@ -33,9 +33,18 @@ var netlifyAuth = runtime.ClientAuthInfoWriterFunc(func(r runtime.ClientRequest,
 var ipProvider publicip.Provider = publicip.OpenDNSProvider{}
 
 func main() {
-	arg.MustParse(&args)
+	validation := arg.MustParse(&args)
 	args.zoneID = strings.ReplaceAll(args.Zone, ".", "_")
-	args.recordHostname = args.Record + "." + args.Zone
+
+	if !args.UpdateRootRecord && args.Record == "" {
+		validation.Fail("Either --record or --updaterootrecord must be provided")
+	}
+
+	if args.UpdateRootRecord {
+		args.recordHostname = args.Zone
+	} else {
+		args.recordHostname = args.Record + "." + args.Zone
+	}
 
 	var lastAnalyticsReport time.Time
 	var forBreak = true
