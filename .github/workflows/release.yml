@@ -21,7 +21,7 @@ jobs:
       - name: Go Installation Information
         run: go version
       - name: Authenticate with Container registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
