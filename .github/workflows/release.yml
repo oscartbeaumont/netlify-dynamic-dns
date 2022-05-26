@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3.2.0
       - name: Go Installation Information
         run: go version
       - name: Authenticate with Container registry
