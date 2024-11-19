@@ -35,7 +35,7 @@ jobs:
           GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${{ env.VERSION }}" -o "nddns_${{ env.VERSION }}_windows_amd64.exe" ./cmd
           GOOS=windows GOARCH=386 go build -ldflags "-X main.Version=${{ env.VERSION }}" -o "nddns_${{ env.VERSION }}_windows_386.exe" ./cmd
       - name: GitHub - Publish Binaries to Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
