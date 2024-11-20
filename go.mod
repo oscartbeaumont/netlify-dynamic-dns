@@ -7,7 +7,7 @@ require (
 	github.com/go-openapi/runtime v0.28.0
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/janeczku/go-spinner v0.0.0-20150530144529-cf8ef1d64394
-	github.com/miekg/dns v1.1.54
+	github.com/miekg/dns v1.1.62
 	github.com/netlify/open-api v1.4.0
 )
 
