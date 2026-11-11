@@ -106,6 +106,7 @@ var invalidCommands = [][]string{
 	{"--access-token=xxxx", "--zone=example.com", "--record=home", "--ttl=59"},
 	{"--access-token=xxxx", "--zone=example.com", "--record=home", "--ttl=86401"},
 	{"--access-token=xxxx", "--zone=example.com", "--record=home", "--interval=-1"},
+	{"--access-token=xxxx", "--zone=example.com", "--record=home", "--interval=153722868"},
 }
 
 // TestInvalidArguments tests different combinations of arguments that are not valid
@@ -157,13 +158,18 @@ func TestNormal(t *testing.T) {
 			t.Errorf("error running command: %s", err)
 		}
 
+		// Drain stderr completely before waiting: warnings are logged before the success line,
+		// and a blocked pipe would stop the child from ever exiting.
 		scanner := bufio.NewScanner(stderr)
-		scanner.Scan()
-		if !strings.Contains(scanner.Text(), "successfully") {
-			t.Errorf("error running command: command didn't report success to terminal")
+		var output strings.Builder
+		for scanner.Scan() {
+			output.WriteString(scanner.Text() + "\n")
 		}
 		if err := cmd.Wait(); err != nil {
-			t.Errorf("error running command: %v", err)
+			t.Errorf("error running command: %v. Output: %s", err, output.String())
+		}
+		if !strings.Contains(output.String(), "successfully") {
+			t.Errorf("error running command: command didn't report success. Output: %s", output.String())
 		}
 
 		getparams := operations.NewGetDNSRecordsParams()
@@ -242,5 +248,64 @@ func TestNormal(t *testing.T) {
 		if _, err := netlify.Operations.DeleteDNSRecord(deleteparams, netlifyAuth); err != nil {
 			t.Errorf("error deleting record '%s' from Netlify DNS: %v", record.Hostname, err)
 		}
+	}
+}
+
+// TestUpdateIsIdempotent runs the update twice with the same public IP. The second run must not
+// leave a duplicate behind, and must not delete the record it just created even if Netlify
+// answers the create for an identical record with the record that already exists.
+func TestUpdateIsIdempotent(t *testing.T) {
+	skipWithoutNetlify(t)
+
+	binary := testBinary(t)
+	recordName := "nddns-test-idem"
+	hostname := recordName + "." + os.Getenv("NDDNS_TEST_ZONE")
+
+	for run := 1; run <= 2; run++ {
+		out, err := exec.Command(binary,
+			"--accesstoken="+os.Getenv("NDDNS_TEST_ACCESS_TOKEN"),
+			"--zone="+os.Getenv("NDDNS_TEST_ZONE"),
+			"--record="+recordName,
+		).CombinedOutput()
+		if err != nil {
+			t.Fatalf("error running command (run %d): %v. Output: %s", run, err, out)
+		}
+	}
+
+	getparams := operations.NewGetDNSRecordsParams()
+	getparams.ZoneID = args.zoneID
+	resp, err := netlify.Operations.GetDNSRecords(getparams, netlifyAuth)
+	if err != nil {
+		t.Fatalf("error retrieving records from Netlify DNS: %v", err)
+	}
+
+	counts := map[string]int{}
+	var toRemove []*models.DNSRecord
+	for _, record := range resp.Payload {
+		if record.Hostname != hostname {
+			continue
+		}
+		counts[record.Type]++
+		toRemove = append(toRemove, record)
+		if record.Type == "A" && record.Value != myIPv4 {
+			t.Errorf("'A' record value = %q, want your public IPv4 address", record.Value)
+		}
+	}
+
+	// Cleanup
+	for _, record := range toRemove {
+		deleteparams := operations.NewDeleteDNSRecordParams()
+		deleteparams.ZoneID = record.DNSZoneID
+		deleteparams.DNSRecordID = record.ID
+		if _, err := netlify.Operations.DeleteDNSRecord(deleteparams, netlifyAuth); err != nil {
+			t.Errorf("error deleting record '%s' from Netlify DNS: %v", record.Hostname, err)
+		}
+	}
+
+	if counts["A"] != 1 {
+		t.Fatalf("found %d 'A' records for '%s' after two updates, want 1", counts["A"], hostname)
+	}
+	if myIPv6 != "" && counts["AAAA"] != 1 {
+		t.Fatalf("found %d 'AAAA' records for '%s' after two updates, want 1", counts["AAAA"], hostname)
 	}
 }

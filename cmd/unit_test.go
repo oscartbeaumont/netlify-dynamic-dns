@@ -65,6 +65,12 @@ func TestRecordTTLFor(t *testing.T) {
 	if got := recordTTLFor(0, nil, "home.example.com", "A", 5); got != 300 {
 		t.Fatalf("A TTL without an existing record = %d, want 300", got)
 	}
+
+	// An existing TTL outside Netlify's range is ignored rather than sent back to the API.
+	outOfRange := []*models.DNSRecord{{ID: "a3", Hostname: "home.example.com", Type: "A", TTL: 90000}}
+	if got := recordTTLFor(0, outOfRange, "home.example.com", "A", 5); got != 300 {
+		t.Fatalf("A TTL with an out of range existing TTL = %d, want 300", got)
+	}
 }
 
 func TestTrimInputs(t *testing.T) {
@@ -205,6 +211,9 @@ func TestRecordsToDelete(t *testing.T) {
 }
 
 func TestRecordsToCreate(t *testing.T) {
+	outOfRangeTTL := []*models.DNSRecord{
+		{ID: "a3", Hostname: "home.example.com", Type: "A", TTL: 90000},
+	}
 	existing := []*models.DNSRecord{
 		{ID: "a1", Hostname: "home.example.com", Type: "A", TTL: 670},
 		{ID: "aaaa1", Hostname: "home.example.com", Type: "AAAA", TTL: 900},
@@ -231,6 +240,12 @@ func TestRecordsToCreate(t *testing.T) {
 	}
 	if records[0].Type != "A" || records[0].TTL != 120 {
 		t.Fatalf("A record = %+v, want the explicit 120 TTL", records[0])
+	}
+
+	// A stale TTL outside Netlify's range falls back to the interval, not to the stale value.
+	records = recordsToCreate(publicIPs{ipv4: "1.2.3.4"}, "home.example.com", 0, outOfRangeTTL, 5)
+	if records[0].TTL != 300 {
+		t.Fatalf("A TTL = %d, want 300 derived from the interval", records[0].TTL)
 	}
 }
 

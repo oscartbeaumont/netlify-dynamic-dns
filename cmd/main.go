@@ -200,19 +200,30 @@ func doUpdate() ([]string, error) {
 	// records are created before the old ones are deleted: if a create fails the hostname keeps
 	// serving its previous address instead of going blank. The duplicates this leaves behind are
 	// deleted below, or by the next update if that delete fails.
+	created := make(map[string]struct{})
 	for _, record := range recordsToCreate(ips, args.recordHostname, args.TTL, resp.Payload, args.Interval) {
 		createparams := operations.NewCreateDNSRecordParams()
 		createparams.ZoneID = args.zoneID
 		createparams.DNSRecord = record
-		if _, err := netlify.Operations.CreateDNSRecord(createparams, netlifyAuth); err != nil {
+		createdRecord, err := netlify.Operations.CreateDNSRecord(createparams, netlifyAuth)
+		if err != nil {
 			if isUnauthorized(err) {
 				return warnings, unauthorizedError(args.Zone)
 			}
 			return warnings, fmt.Errorf("error creating new DNS record: %w", describeAPIError(err, record.Hostname, record.Type, ""))
 		}
+		// Netlify may answer a create for an identical record with the record that already
+		// exists, so the ids it returns are never deleted below.
+		if createdRecord != nil && createdRecord.Payload != nil && createdRecord.Payload.ID != "" {
+			created[createdRecord.Payload.ID] = struct{}{}
+		}
 	}
 
 	for _, record := range existing {
+		if _, ok := created[record.ID]; ok {
+			continue
+		}
+
 		deleteparams := operations.NewDeleteDNSRecordParams()
 		deleteparams.ZoneID = record.DNSZoneID
 		deleteparams.DNSRecordID = record.ID
@@ -222,7 +233,7 @@ func doUpdate() ([]string, error) {
 			}
 			// The new records are already live, so a failed delete is a duplicate record rather
 			// than a broken hostname (issue #18). It is retried by the next update.
-			warnings = append(warnings, "Warning: could not delete the old DNS record, it will be retried on the next update: "+
+			warnings = append(warnings, "Warning: could not delete the old DNS record, it will be retried on the next update or run: "+
 				describeAPIError(err, record.Hostname, record.Type, record.ID).Error())
 		}
 	}
