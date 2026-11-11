@@ -4,7 +4,11 @@
 
 name: CI
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -55,10 +59,14 @@ jobs:
       - name: Parse with bash --posix
         run: bash --posix -n install.sh
       - name: Install into a temporary prefix
+        # The tag is pinned so the job tests the script rather than whatever release happens to be
+        # latest: publishing a release creates its tag before the workflow has uploaded the assets,
+        # and a job that installs "latest" would race that upload.
         # The API call is rate limited to 60 requests an hour per IP when unauthenticated, and
         # GitHub-hosted runners share their egress addresses.
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          NDDNS_VERSION: v3.0.3
         run: |
           set -eux
           PREFIX="$RUNNER_TEMP/prefix" sh ./install.sh
