@@ -2,14 +2,14 @@
 # Installs the latest Netlify Dynamic DNS (nddns) release from GitHub.
 #
 # POSIX sh on purpose: /bin/sh is dash on Debian and Raspberry Pi OS.
-#   curl -fsSL https://raw.githubusercontent.com/oscartbeaumont/netlify-dynamic-dns/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/oscartbeaumont/netlify-dynamic-dns/master/install.sh | sh
 # Overrides: PREFIX (default /usr/local), DESTDIR, NDDNS_VERSION (release tag),
 # NDDNS_OS, NDDNS_ARCH (amd64, 386, arm64, armv7, armv6), GITHUB_TOKEN.
 set -u
 
 REPO="oscartbeaumont/netlify-dynamic-dns"
 PROGRAM="nddns"
-INSTALL_URL="https://raw.githubusercontent.com/${REPO}/main/install.sh"
+INSTALL_URL="https://raw.githubusercontent.com/${REPO}/master/install.sh"
 
 say() { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }

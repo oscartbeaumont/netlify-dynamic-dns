@@ -1,9 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
-	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -32,130 +33,190 @@ var ipProvider publicip.Provider = publicip.OpenDNSProvider{}
 
 func main() {
 	validation := arg.MustParse(&args)
-	args.zoneID = strings.ReplaceAll(args.Zone, ".", "_")
+	trimInputs(&args)
 
 	if !args.UpdateRootRecord && args.Record == "" {
 		validation.Fail("Either --record or --updaterootrecord must be provided")
 	}
+	if err := validateZone(args.Zone); err != nil {
+		validation.Fail(fmt.Sprintf("Invalid --zone: %v", err))
+	}
+	if !args.UpdateRootRecord {
+		if err := validateRecord(args.Record, args.Zone); err != nil {
+			validation.Fail(fmt.Sprintf("Invalid --record: %v", err))
+		}
+	}
+	if args.TTL != 0 && args.TTL < minTTL {
+		validation.Fail(fmt.Sprintf("Invalid --ttl: must be at least %d seconds", minTTL))
+	}
+	if args.Interval < 0 {
+		validation.Fail("Invalid --interval: must not be negative")
+	}
 
+	args.zoneID = strings.ReplaceAll(args.Zone, ".", "_")
 	if args.UpdateRootRecord {
 		args.recordHostname = args.Zone
 	} else {
 		args.recordHostname = args.Record + "." + args.Zone
 	}
 
-	var forBreak = true
-	for forBreak {
-		s := startSpinner("Updating DNS record")
-		err := doUpdate()
-		s.Stop()
-
-		if err != nil {
-			log.Println(Red + "Error: Error Updating DNS Record " + err.Error() + Reset)
-		} else if args.Interval == 0 {
-			log.Println(Green + "DNS records updated successfully." + Reset + "")
-			forBreak = false
+	if err := run(); err != nil {
+		if errors.Is(err, errUnauthorized) {
+			log.Println(Red + "Fatal error: " + err.Error() + Reset)
 		} else {
-			log.Println(Green + "DNS records updated successfully. Next update in " + strconv.Itoa(args.Interval) + " minutes" + Reset + "")
-			time.Sleep(time.Duration(args.Interval) * time.Minute)
+			log.Println(Red + "Error updating DNS records: " + err.Error() + Reset)
 		}
+		os.Exit(1)
 	}
 }
 
-// doUpdate updates the DNS records with the public IP address
-func doUpdate() error {
-	// Get the Public IP
-	ipv4, err := ipProvider.GetIPv4()
-	if err != nil {
-		return fmt.Errorf("error retrieving your public ipv4 address: %w", err)
+// run performs the first update and then keeps updating at the configured interval. A failure on
+// the first update is returned so a misconfiguration exits with an error instead of retrying
+// forever, as is a rejected access token. Later failures are logged and retried.
+func run() error {
+	first := true
+	// A daemon updating every few minutes would otherwise repeat the same warning forever.
+	seenWarnings := make(map[string]struct{})
+	for {
+		s := startSpinner("Updating DNS records")
+		warnings, err := doUpdate()
+		s.Stop()
+		for _, warning := range warnings {
+			if _, seen := seenWarnings[warning]; seen {
+				continue
+			}
+			seenWarnings[warning] = struct{}{}
+			log.Println(warning)
+		}
+
+		switch {
+		case err != nil && (first || errors.Is(err, errUnauthorized)):
+			return err
+		case err != nil:
+			log.Println(Red + "Error updating DNS records: " + err.Error() + Reset)
+		case args.Interval == 0:
+			log.Println(Green + "DNS records updated successfully." + Reset)
+			return nil
+		default:
+			log.Println(Green + "DNS records updated successfully. Next update in " + strconv.Itoa(args.Interval) + " minutes" + Reset)
+		}
+
+		first = false
+		time.Sleep(time.Duration(args.Interval) * time.Minute)
+	}
+}
+
+// publicIPs holds the addresses used for a single update. ipv6 is empty when the AAAA record is
+// not being updated.
+type publicIPs struct {
+	ipv4     string
+	ipv6     string
+	warnings []string
+}
+
+// resolvePublicIPs looks up the public addresses to publish. IPv6 is best effort: a machine
+// without IPv6 connectivity (common on residential connections and on hosts with only a link
+// local address) must still get its A record updated, so a failed lookup only disables the AAAA
+// record for this update.
+func resolvePublicIPs(provider publicip.Provider, wantIPv6 bool) (publicIPs, error) {
+	var ips publicIPs
+
+	var err error
+	if ips.ipv4, err = provider.GetIPv4(); err != nil {
+		return ips, fmt.Errorf("error retrieving your public ipv4 address: %w", err)
 	}
 
-	var ipv6 string
-	if args.IPv6 {
-		ipv6, err = ipProvider.GetIPv6()
-		if err != nil {
-			return fmt.Errorf("error retrieving your public ipv6 address: %w", err)
-		}
+	if !wantIPv6 {
+		return ips, nil
 	}
+
+	if ips.ipv6, err = provider.GetIPv6(); err != nil {
+		ips.ipv6 = ""
+		ips.warnings = append(ips.warnings, "Warning: skipping the IPv6 (AAAA) record: "+err.Error()+". Use --ipv6=false to silence this.")
+	}
+
+	return ips, nil
+}
+
+// doUpdate updates the DNS records with the public IP address. Problems that do not stop the
+// update are returned as warnings so they can be logged after the spinner has been cleared.
+func doUpdate() ([]string, error) {
+	ips, err := resolvePublicIPs(ipProvider, args.IPv6)
+	if err != nil {
+		return ips.warnings, err
+	}
+	warnings := ips.warnings
+	updateIPv6 := ips.ipv6 != ""
 
 	getparams := operations.NewGetDNSRecordsParams()
 	getparams.ZoneID = args.zoneID
 	resp, err := netlify.Operations.GetDNSRecords(getparams, netlifyAuth)
 	if err != nil {
-		errr, apiError := err.(*operations.GetDNSRecordsDefault)
-		if apiError && errr.Code() == http.StatusUnauthorized {
-			log.Fatalln("\r" + Red + "Fatal Error: Netlify API access token unauthorised" + Reset + "")
-		} else {
-			return fmt.Errorf("error retrieving your records from Netlify DNS: %w", err)
+		if isUnauthorized(err) {
+			return warnings, unauthorizedError(args.Zone)
 		}
+		return warnings, fmt.Errorf("error retrieving your records from Netlify DNS: %w", describeAPIError(err, "", "", ""))
 	}
 
-	// Get existing records if they exist
-	var existingARecord *models.DNSRecord
-	var existingAAAARecord *models.DNSRecord
-	for _, record := range resp.Payload {
-		if record.Hostname == args.recordHostname {
-			if record.Type == "A" {
-				existingARecord = record
-			} else if record.Type == "AAAA" {
-				existingAAAARecord = record
+	existingA := firstRecordOfType(resp.Payload, args.recordHostname, "A")
+	var existingAAAA *models.DNSRecord
+	if updateIPv6 {
+		existingAAAA = firstRecordOfType(resp.Payload, args.recordHostname, "AAAA")
+	}
+
+	// Delete every existing record for the hostname (Netlify DNS API has no update feature).
+	// Only touch the types being replaced so disabling IPv6 leaves any AAAA records alone.
+	for _, record := range recordsToDelete(resp.Payload, args.recordHostname) {
+		if record.Type == "AAAA" && !updateIPv6 {
+			continue
+		}
+
+		deleteparams := operations.NewDeleteDNSRecordParams()
+		deleteparams.ZoneID = record.DNSZoneID
+		deleteparams.DNSRecordID = record.ID
+		if _, err := netlify.Operations.DeleteDNSRecord(deleteparams, netlifyAuth); err != nil {
+			if isUnauthorized(err) {
+				return warnings, unauthorizedError(args.Zone)
 			}
+			return warnings, fmt.Errorf("error deleting existing DNS record: %w", describeAPIError(err, record.Hostname, record.Type, record.ID))
 		}
 	}
 
-	// Delete existing records if they exist (Netlify DNS API has no update feature)
-	if existingARecord != nil {
-		deleteparams := operations.NewDeleteDNSRecordParams()
-		deleteparams.ZoneID = existingARecord.DNSZoneID
-		deleteparams.DNSRecordID = existingARecord.ID
-		if _, err := netlify.Operations.DeleteDNSRecord(deleteparams, netlifyAuth); err != nil {
-			return fmt.Errorf("error deleting existing record from Netlify DNS: %w", err)
-		}
-	}
-
-	if existingAAAARecord != nil {
-		deleteparams := operations.NewDeleteDNSRecordParams()
-		deleteparams.ZoneID = existingAAAARecord.DNSZoneID
-		deleteparams.DNSRecordID = existingAAAARecord.ID
-		if _, err := netlify.Operations.DeleteDNSRecord(deleteparams, netlifyAuth); err != nil {
-			return fmt.Errorf("error deleting existing record from Netlify DNS: %w", err)
-		}
-	}
-
-	// Create new record
-	var ipv4Record = &models.DNSRecordCreate{
+	ipv4Record := &models.DNSRecordCreate{
 		Hostname: args.recordHostname,
 		Type:     "A",
-		Value:    ipv4,
-	}
-	if existingARecord != nil {
-		ipv4Record.TTL = existingARecord.TTL
+		Value:    ips.ipv4,
+		TTL:      resolveTTL(args.TTL, recordTTL(existingA), args.Interval),
 	}
 
 	createparams := operations.NewCreateDNSRecordParams()
 	createparams.ZoneID = args.zoneID
 	createparams.DNSRecord = ipv4Record
 	if _, err := netlify.Operations.CreateDNSRecord(createparams, netlifyAuth); err != nil {
-		return fmt.Errorf("error creating new DNS record on Netlify DNS: %w", err)
+		if isUnauthorized(err) {
+			return warnings, unauthorizedError(args.Zone)
+		}
+		return warnings, fmt.Errorf("error creating new DNS record: %w", describeAPIError(err, ipv4Record.Hostname, ipv4Record.Type, ""))
 	}
 
-	if args.IPv6 {
-		var ipv6Record = &models.DNSRecordCreate{
+	if updateIPv6 {
+		ipv6Record := &models.DNSRecordCreate{
 			Hostname: args.recordHostname,
 			Type:     "AAAA",
-			Value:    ipv6,
-		}
-		if existingAAAARecord != nil {
-			ipv6Record.TTL = existingAAAARecord.TTL
+			Value:    ips.ipv6,
+			TTL:      resolveTTL(args.TTL, recordTTL(existingAAAA), args.Interval),
 		}
 
 		create2params := operations.NewCreateDNSRecordParams()
 		create2params.ZoneID = args.zoneID
 		create2params.DNSRecord = ipv6Record
 		if _, err := netlify.Operations.CreateDNSRecord(create2params, netlifyAuth); err != nil {
-			return fmt.Errorf("error creating new DNS record on Netlify DNS: %w", err)
+			if isUnauthorized(err) {
+				return warnings, unauthorizedError(args.Zone)
+			}
+			return warnings, fmt.Errorf("error creating new DNS record: %w", describeAPIError(err, ipv6Record.Hostname, ipv6Record.Type, ""))
 		}
 	}
 
-	return nil
+	return warnings, nil
 }

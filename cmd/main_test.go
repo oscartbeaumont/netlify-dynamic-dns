@@ -21,29 +21,34 @@ var myIPv6 string
 
 // TestMain sets up and shuts down the testing environment
 func TestMain(m *testing.M) {
-	if os.Getenv("NDDNS_TEST_ACCESS_TOKEN") == "" {
-		log.Fatalln("Error 'NDDNS_TEST_ACCESS_TOKEN' environment varible is required to run tests")
+	if os.Getenv("NDDNS_TEST_ACCESS_TOKEN") == "" || os.Getenv("NDDNS_TEST_ZONE") == "" {
+		// The integration tests skip themselves; the unit tests still run.
+		os.Exit(m.Run())
 	}
-	if os.Getenv("NDDNS_TEST_ZONE") == "" {
-		log.Fatalln("Error 'NDDNS_TEST_ZONE' environment varible is required to run tests")
-	}
-	os.Setenv("NDDNS_DISABLE_ANALYTICS", "true")
+
 	args.AccessToken = os.Getenv("NDDNS_TEST_ACCESS_TOKEN")
 	args.zoneID = strings.ReplaceAll(os.Getenv("NDDNS_TEST_ZONE"), ".", "_")
 
 	// Get the Public IP
 	var err error
 	if myIPv4, err = ipProvider.GetIPv4(); err != nil {
-		log.Fatalln("error retrieving your public ipv4 address: %w", err)
+		log.Fatalf("error retrieving your public ipv4 address: %v", err)
 	}
 	if os.Getenv("NDDNS_IPv6_ENABLED") != "false" {
 		if myIPv6, err = ipProvider.GetIPv6(); err != nil {
-			log.Fatalln("error retrieving your public ipv6 address: %w", err)
+			log.Fatalf("error retrieving your public ipv6 address: %v", err)
 		}
 	}
 	code := m.Run()
-	os.Setenv("NDDNS_DISABLE_ANALYTICS", "")
 	os.Exit(code)
+}
+
+// skipWithoutNetlify skips an integration test when the Netlify test credentials are not set.
+func skipWithoutNetlify(t *testing.T) {
+	t.Helper()
+	if os.Getenv("NDDNS_TEST_ACCESS_TOKEN") == "" || os.Getenv("NDDNS_TEST_ZONE") == "" {
+		t.Skip("NDDNS_TEST_ACCESS_TOKEN and NDDNS_TEST_ZONE are required for integration tests")
+	}
 }
 
 var invalidCommands = [][]string{
@@ -54,6 +59,11 @@ var invalidCommands = [][]string{
 	{"--record=example.com"},
 	{"--access-token=xxxx", "--record=example.com"},
 	{"--zone=example.com", "--record=example.com"},
+	{"--access-token=xxxx", "--zone=example com", "--record=home"},
+	{"--access-token=xxxx", "--zone=https://example.com", "--record=home"},
+	{"--access-token=xxxx", "--zone=example.com", "--record=home.example.com"},
+	{"--access-token=xxxx", "--zone=example.com", "--record=home", "--ttl=59"},
+	{"--access-token=xxxx", "--zone=example.com", "--record=home", "--interval=-1"},
 }
 
 // TestInvalidArguments tests different combinations of arguments that are not valid
@@ -68,6 +78,8 @@ func TestInvalidArguments(t *testing.T) {
 
 // TestNormal tests the normal functionality of the project including TTL passthrough, multirecord based issues, subsubdomains
 func TestNormal(t *testing.T) {
+	skipWithoutNetlify(t)
+
 	// Create existing record 'nddns-test-01' with weird TTL to test passthrough
 	for _, record := range [][]string{{"A", "0.0.0.0"}, {"AAAA", "0000:0000:0000:0000:0000:0000:0000:0000"}} {
 		createparams := operations.NewCreateDNSRecordParams()
@@ -116,34 +128,37 @@ func TestNormal(t *testing.T) {
 		var foundA bool
 		var foundAAAA bool
 		for _, record := range resp.Payload {
-			if record.Hostname == recordHostname {
-				if record.Type == "A" {
-					if foundA {
-						t.Fatalf("Duplicate 'A' record found for hostname '%v'", recordHostname)
-					}
+			if record.Hostname != recordHostname {
+				continue
+			}
 
-					if record.Value != myIPv4 {
-						t.Fatalf("error record value != your public IPv4 address")
-					} else if recordName == "nddns-test-01" && record.TTL != 670 {
-						t.Fatalf("error record has TTL of '%v' expected '%v' from existing record", record.TTL, 670)
-					}
-
-					foundA = true
-					recordsToRemove = append(recordsToRemove, record)
-				} else if record.Type == "AAAA" {
-					if foundAAAA {
-						t.Fatalf("Duplicate 'AAAA' record found for hostname '%v'", recordHostname)
-					}
-
-					if record.Value != myIPv6 {
-						t.Fatalf("error record value != your public IPv6 address")
-					} else if recordName == "nddns-test-01" && record.TTL != 670 {
-						t.Fatalf("error record has TTL of '%v' expected '%v' from existing record", record.TTL, 670)
-					}
-
-					foundAAAA = true
-					recordsToRemove = append(recordsToRemove, record)
+			switch record.Type {
+			case "A":
+				if foundA {
+					t.Fatalf("Duplicate 'A' record found for hostname '%v'", recordHostname)
 				}
+
+				if record.Value != myIPv4 {
+					t.Fatalf("error record value != your public IPv4 address")
+				} else if recordName == "nddns-test-01" && record.TTL != 670 {
+					t.Fatalf("error record has TTL of '%v' expected '%v' from existing record", record.TTL, 670)
+				}
+
+				foundA = true
+				recordsToRemove = append(recordsToRemove, record)
+			case "AAAA":
+				if foundAAAA {
+					t.Fatalf("Duplicate 'AAAA' record found for hostname '%v'", recordHostname)
+				}
+
+				if record.Value != myIPv6 {
+					t.Fatalf("error record value != your public IPv6 address")
+				} else if recordName == "nddns-test-01" && record.TTL != 670 {
+					t.Fatalf("error record has TTL of '%v' expected '%v' from existing record", record.TTL, 670)
+				}
+
+				foundAAAA = true
+				recordsToRemove = append(recordsToRemove, record)
 			}
 		}
 

@@ -72,7 +72,7 @@ func (opdns OpenDNSProvider) GetIPv6() (string, error) {
 	// Query OpenDNS for clients public ip
 	res, err := opdns.doQuery(opendnsMyIP, dns.TypeAAAA, "["+opdnsRecord.AAAA.String()+"]:53")
 	if erry, ok := err.(*net.OpError); ok && erry.Err.Error() == "connect: no route to host" {
-		return "", errors.New("No route to OpenDNS IPv6. Does your connection support IPv6?")
+		return "", errors.New("no route to OpenDNS IPv6. Does your connection support IPv6?")
 	} else if err != nil {
 		return "", err
 	}
