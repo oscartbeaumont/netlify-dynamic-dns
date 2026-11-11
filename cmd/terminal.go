@@ -18,14 +18,15 @@ var Red = "\033[31m"
 var Green = "\033[32m"
 
 func init() {
-	// Log will be default override the current console line
-	log.SetPrefix("\r")
-
-	// Windows doesn't support console color's so remove them
-	if runtime.GOOS == "windows" {
+	// Windows doesn't support console color's so remove them, and pipes or service managers
+	// should not receive escape sequences either.
+	if runtime.GOOS == "windows" || !isTerminal {
 		Reset = ""
 		Red = ""
 		Green = ""
+	} else {
+		// Log will default override the current console line drawn by the spinner.
+		log.SetPrefix("\r")
 	}
 }
 

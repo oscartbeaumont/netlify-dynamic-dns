@@ -16,12 +16,15 @@ func recordsToDelete(records []*models.DNSRecord, hostname string) []*models.DNS
 		if record.Type != "A" && record.Type != "AAAA" {
 			continue
 		}
-		if record.ID != "" {
-			if _, ok := seen[record.ID]; ok {
-				continue
-			}
-			seen[record.ID] = struct{}{}
+		// Without an id the delete request would be malformed, and aborting the update halfway
+		// through the deletes would leave the hostname without a record.
+		if record.ID == "" {
+			continue
 		}
+		if _, ok := seen[record.ID]; ok {
+			continue
+		}
+		seen[record.ID] = struct{}{}
 		result = append(result, record)
 	}
 
@@ -37,6 +40,12 @@ func firstRecordOfType(records []*models.DNSRecord, hostname, recordType string)
 		}
 	}
 	return nil
+}
+
+// recordTTLFor picks the TTL for one record type, preferring the TTL of the record of that type
+// which is about to be replaced.
+func recordTTLFor(explicit int64, records []*models.DNSRecord, hostname, recordType string, intervalMinutes int) int64 {
+	return resolveTTL(explicit, recordTTL(firstRecordOfType(records, hostname, recordType)), intervalMinutes)
 }
 
 // recordTTL returns the TTL of record, or 0 when there is no record.

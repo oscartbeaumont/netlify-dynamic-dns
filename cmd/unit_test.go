@@ -40,11 +40,27 @@ func TestResolveTTL(t *testing.T) {
 	}
 }
 
-func TestResolveTTLGivesBothRecordTypesTheSameDerivedTTL(t *testing.T) {
-	a := resolveTTL(0, recordTTL(nil), 5)
-	aaaa := resolveTTL(0, recordTTL(nil), 5)
-	if a != aaaa || a != 300 {
-		t.Fatalf("A TTL = %d and AAAA TTL = %d, want both to be 300", a, aaaa)
+func TestRecordTTLFor(t *testing.T) {
+	payload := []*models.DNSRecord{
+		{ID: "a1", Hostname: "home.example.com", Type: "A", TTL: 670},
+		{ID: "aaaa1", Hostname: "home.example.com", Type: "AAAA", TTL: 900},
+		{ID: "a2", Hostname: "other.example.com", Type: "A", TTL: 1200},
+	}
+
+	// Each record type keeps the TTL of the record it replaces.
+	if got := recordTTLFor(0, payload, "home.example.com", "A", 5); got != 670 {
+		t.Fatalf("A TTL = %d, want the existing 670", got)
+	}
+	if got := recordTTLFor(0, payload, "home.example.com", "AAAA", 5); got != 900 {
+		t.Fatalf("AAAA TTL = %d, want the existing 900", got)
+	}
+
+	// An explicit TTL overrides both, and a type with no existing record falls back to the interval.
+	if got := recordTTLFor(120, payload, "home.example.com", "AAAA", 5); got != 120 {
+		t.Fatalf("AAAA TTL with --ttl = %d, want 120", got)
+	}
+	if got := recordTTLFor(0, nil, "home.example.com", "A", 5); got != 300 {
+		t.Fatalf("A TTL without an existing record = %d, want 300", got)
 	}
 }
 
@@ -161,21 +177,17 @@ func TestRecordsToDelete(t *testing.T) {
 	}
 
 	got := recordsToDelete(payload, "home.example.com")
-	wantIDs := map[string]int{"a1": 1, "aaaa1": 1, "": 2}
-	wantTotal := 0
-	for _, count := range wantIDs {
-		wantTotal += count
-	}
-	if len(got) != wantTotal {
-		t.Fatalf("recordsToDelete returned %d records, want %d: %v", len(got), wantTotal, got)
+	want := map[string]int{"a1": 1, "aaaa1": 1}
+	if len(got) != len(want) {
+		t.Fatalf("recordsToDelete returned %d records, want %d: %v", len(got), len(want), got)
 	}
 	for _, record := range got {
-		if wantIDs[record.ID] == 0 {
+		if want[record.ID] == 0 {
 			t.Fatalf("unexpected record in result: %+v", record)
 		}
-		wantIDs[record.ID]--
+		want[record.ID]--
 	}
-	for id, remaining := range wantIDs {
+	for id, remaining := range want {
 		if remaining != 0 {
 			t.Fatalf("record with id %q was not returned the expected number of times", id)
 		}

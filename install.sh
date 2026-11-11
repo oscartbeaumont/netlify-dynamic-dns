@@ -33,8 +33,17 @@ Supported: Darwin, Linux. Set NDDNS_OS to override." ;;
 	esac
 }
 
+SUPPORTED_ARCHS="amd64, 386, arm64, armv7, armv6"
+
 detect_arch() {
-	[ -n "${NDDNS_ARCH:-}" ] && { printf '%s\n' "$NDDNS_ARCH"; return 0; }
+	if [ -n "${NDDNS_ARCH:-}" ]; then
+		case $NDDNS_ARCH in
+			amd64 | 386 | arm64 | armv7 | armv6) printf '%s\n' "$NDDNS_ARCH"; return 0 ;;
+			*) die "NDDNS_ARCH='${NDDNS_ARCH}' is not supported.
+Supported architectures: ${SUPPORTED_ARCHS}." ;;
+		esac
+	fi
+
 	machine=$(uname -m) || die "could not run 'uname' to detect the architecture"
 	case $machine in
 		x86_64 | amd64)          printf 'amd64\n' ;;
@@ -43,7 +52,7 @@ detect_arch() {
 		armv7l | armv7 | armv8l) printf 'armv7\n' ;;
 		armv6l)                  printf 'armv6\n' ;;
 		*) die "architecture '$machine' is not supported by this script.
-Supported: amd64, 386, arm64, armv7, armv6. Set NDDNS_ARCH to override." ;;
+Supported architectures: ${SUPPORTED_ARCHS}. Set NDDNS_ARCH to override." ;;
 	esac
 }
 
@@ -94,13 +103,25 @@ for url in $(json_strings browser_download_url < "$release_json"); do
 done
 
 if [ -z "$download_url" ]; then
-	die "release ${tag} has no asset named '${asset}'.
+	message="release ${tag} has no asset named '${asset}'.
 Looked for: ${asset}
 Assets in ${tag}:
-$(json_strings browser_download_url < "$release_json" | sed -e 's|.*/|  |')
-Set NDDNS_ARCH or NDDNS_OS to override the detected platform (${os}/${arch}).
-Supported architectures: amd64, 386, arm64, armv7, armv6.
-Otherwise please open an issue at https://github.com/${REPO}/issues"
+$(json_strings browser_download_url < "$release_json" | sed -e 's|.*/|  |')"
+
+	if [ -n "${NDDNS_OS:-}" ] || [ -n "${NDDNS_ARCH:-}" ]; then
+		message="${message}
+The NDDNS_OS/NDDNS_ARCH overrides are already set, so check that this release
+publishes a binary for them."
+	else
+		message="${message}
+Set NDDNS_OS or NDDNS_ARCH to override the detected platform (${os}/${arch}).
+Supported architectures: ${SUPPORTED_ARCHS}."
+	fi
+
+	die "${message}
+Releases before v3.0.3 use a different asset naming scheme and are not
+supported by this script. Otherwise please open an issue at
+https://github.com/${REPO}/issues"
 fi
 
 say "Downloading ${download_url}"

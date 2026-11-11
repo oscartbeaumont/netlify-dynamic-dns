@@ -1,0 +1,7 @@
+# Keep the build context small: the builder stage only needs the Go sources.
+.git
+.github
+nddns_v*
+nddns_*
+Dockerfile
+.dockerignore

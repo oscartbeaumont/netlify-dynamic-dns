@@ -1,5 +1,6 @@
 # GitHub Actions Workflow for Continuous Integration
-# The repository must be configured with secrets NDDNS_TEST_ZONE and NDDNS_TEST_ACCESS_TOKEN for propper function of the tests.
+# The integration tests need the NDDNS_TEST_ZONE and NDDNS_TEST_ACCESS_TOKEN secrets and skip
+# themselves when they are not configured (for example on pull requests from forks).
 
 name: CI
 
@@ -16,6 +17,10 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Setup Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
 
@@ -25,12 +30,14 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - name: Setup Go
         uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
       - name: Go Installation Information
         run: go version
       - name: Build Binary
         run: go build -o nddns ./cmd
       - name: Run Tests
-        run: go test ./cmd
+        run: go test ./...
     env:
       NDDNS_IPv6_ENABLED: false # Note: GitHub Actions does not yet support IPv6 so this has been disabled.
       NDDNS_TEST_ZONE: ${{ secrets.NDDNS_TEST_ZONE }}
@@ -48,8 +55,12 @@ jobs:
       - name: Parse with bash --posix
         run: bash --posix -n install.sh
       - name: Install into a temporary prefix
+        # The API call is rate limited to 60 requests an hour per IP when unauthenticated, and
+        # GitHub-hosted runners share their egress addresses.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -eux
-          NDDNS_OS=linux NDDNS_ARCH=amd64 PREFIX="$RUNNER_TEMP/prefix" sh ./install.sh
+          PREFIX="$RUNNER_TEMP/prefix" sh ./install.sh
           test -x "$RUNNER_TEMP/prefix/bin/nddns"
           "$RUNNER_TEMP/prefix/bin/nddns" --version

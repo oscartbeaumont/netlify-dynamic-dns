@@ -49,6 +49,9 @@ func main() {
 	if args.TTL != 0 && args.TTL < minTTL {
 		validation.Fail(fmt.Sprintf("Invalid --ttl: must be at least %d seconds", minTTL))
 	}
+	if args.TTL > maxTTL {
+		validation.Fail(fmt.Sprintf("Invalid --ttl: must be at most %d seconds (one day)", maxTTL))
+	}
 	if args.Interval < 0 {
 		validation.Fail("Invalid --interval: must not be negative")
 	}
@@ -158,12 +161,6 @@ func doUpdate() ([]string, error) {
 		return warnings, fmt.Errorf("error retrieving your records from Netlify DNS: %w", describeAPIError(err, "", "", ""))
 	}
 
-	existingA := firstRecordOfType(resp.Payload, args.recordHostname, "A")
-	var existingAAAA *models.DNSRecord
-	if updateIPv6 {
-		existingAAAA = firstRecordOfType(resp.Payload, args.recordHostname, "AAAA")
-	}
-
 	// Delete every existing record for the hostname (Netlify DNS API has no update feature).
 	// Only touch the types being replaced so disabling IPv6 leaves any AAAA records alone.
 	for _, record := range recordsToDelete(resp.Payload, args.recordHostname) {
@@ -186,7 +183,7 @@ func doUpdate() ([]string, error) {
 		Hostname: args.recordHostname,
 		Type:     "A",
 		Value:    ips.ipv4,
-		TTL:      resolveTTL(args.TTL, recordTTL(existingA), args.Interval),
+		TTL:      recordTTLFor(args.TTL, resp.Payload, args.recordHostname, "A", args.Interval),
 	}
 
 	createparams := operations.NewCreateDNSRecordParams()
@@ -204,7 +201,7 @@ func doUpdate() ([]string, error) {
 			Hostname: args.recordHostname,
 			Type:     "AAAA",
 			Value:    ips.ipv6,
-			TTL:      resolveTTL(args.TTL, recordTTL(existingAAAA), args.Interval),
+			TTL:      recordTTLFor(args.TTL, resp.Payload, args.recordHostname, "AAAA", args.Interval),
 		}
 
 		create2params := operations.NewCreateDNSRecordParams()
