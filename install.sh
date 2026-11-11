@@ -1,47 +1,139 @@
 #!/bin/sh
-# Installs the latest release of Netlify Dynamic DNS from GitHub
-# Repository: https://github.com/oscartbeaumont/netlify-dynamic-dns
+# Installs the latest Netlify Dynamic DNS (nddns) release from GitHub.
+#
+# POSIX sh on purpose: /bin/sh is dash on Debian and Raspberry Pi OS.
+#   curl -fsSL https://raw.githubusercontent.com/oscartbeaumont/netlify-dynamic-dns/main/install.sh | sh
+# Overrides: PREFIX (default /usr/local), DESTDIR, NDDNS_VERSION (release tag),
+# NDDNS_OS, NDDNS_ARCH (amd64, 386, arm64, armv7, armv6), GITHUB_TOKEN.
+set -u
 
-function error() {
-  echo $1 >&2
-  exit 1
+REPO="oscartbeaumont/netlify-dynamic-dns"
+PROGRAM="nddns"
+INSTALL_URL="https://raw.githubusercontent.com/${REPO}/main/install.sh"
+
+say() { printf '%s\n' "$*"; }
+warn() { printf 'warning: %s\n' "$*" >&2; }
+die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+# Print every value of the "$1" field in the JSON on stdin. Splitting on commas
+# puts one key/value pair per line, which is enough for the fields we read and
+# avoids depending on jq.
+json_strings() {
+	tr ',' '\n' | sed -n 's/^[[:space:]]*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p'
 }
 
-if test "$(uname)" = "Darwin"; then
-    OS="darwin"
-elif test "$(uname)" = "Linux"; then
-    OS="linux"
-else
-    error "Operating system '$(uname)' is not supported by this script!"
-fi
+detect_os() {
+	[ -n "${NDDNS_OS:-}" ] && { printf '%s\n' "$NDDNS_OS"; return 0; }
+	kernel=$(uname -s) || die "could not run 'uname' to detect the operating system"
+	case $kernel in
+		Darwin) printf 'darwin\n' ;;
+		Linux) printf 'linux\n' ;;
+		*) die "operating system '$kernel' is not supported by this script.
+Supported: Darwin, Linux. Set NDDNS_OS to override." ;;
+	esac
+}
 
-case $(uname -m) in
-    i386 | i686)      architecture="386" ;;
-    x86_64)           architecture="amd64" ;;
-    arm64 | aarch64)  architecture="arm64" ;;
-    armv7 | armv7l)   architecture="armv7" ;;
-    *)                error "System architecture '$(uname -m)' is not supported by this script!" ;;
-esac
+detect_arch() {
+	[ -n "${NDDNS_ARCH:-}" ] && { printf '%s\n' "$NDDNS_ARCH"; return 0; }
+	machine=$(uname -m) || die "could not run 'uname' to detect the architecture"
+	case $machine in
+		x86_64 | amd64)          printf 'amd64\n' ;;
+		i386 | i686 | i86pc)     printf '386\n' ;;
+		aarch64 | arm64)         printf 'arm64\n' ;;
+		armv7l | armv7 | armv8l) printf 'armv7\n' ;;
+		armv6l)                  printf 'armv6\n' ;;
+		*) die "architecture '$machine' is not supported by this script.
+Supported: amd64, 386, arm64, armv7, armv6. Set NDDNS_ARCH to override." ;;
+	esac
+}
 
-download_url=$(curl -s https://api.github.com/repos/oscartbeaumont/netlify-dynamic-dns/releases/latest \
-    | grep "browser_download_url.*nddns_.*_${OS}_${architecture}" \
-    | cut -d ":" -f 2,3 \
-    | tr -d \")
-
-if [[ -z "${download_url// }" ]]; then
-  error "Could not locate a binary for your operating system and architecture!"
-else
-  echo "Downloading binary from ${download_url// }"
-fi;
-
-temp_dir=$(mktemp -d -t nddns)
-function cleanup {
-  rm -rf $temp_dir
+tmp_dir=""
+cleanup() {
+	[ -z "$tmp_dir" ] || rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
-curl -o "$temp_dir/nddns" -Ls $download_url || { error "Error getting latest binary from Github. Try again or open an issue on the repository!"; }
-chmod +x "$temp_dir/nddns"
-mv "$temp_dir/nddns" /usr/local/bin/ || { error "Error moving binary to /usr/local/bin. Maybe try running this script as root!"; }
+os=$(detect_os) || exit 1
+arch=$(detect_arch) || exit 1
 
-echo "Netlify Dynamic DNS Installed to: $(which nddns)"
+if [ -n "${NDDNS_VERSION:-}" ]; then
+	release_url="https://api.github.com/repos/${REPO}/releases/tags/${NDDNS_VERSION}"
+else
+	release_url="https://api.github.com/repos/${REPO}/releases/latest"
+fi
+
+fetch() {
+	if [ -n "${GITHUB_TOKEN:-}" ]; then
+		curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" "$1"
+	else
+		curl -fsSL "$1"
+	fi
+}
+
+tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/nddns.XXXXXX") || die "could not create a temporary directory"
+release_json="${tmp_dir}/release.json"
+say "Looking up Netlify Dynamic DNS for ${os}/${arch}..."
+fetch "$release_url" > "$release_json" || die "could not query the GitHub releases API (${release_url}).
+If NDDNS_VERSION is set, check that the tag exists. Otherwise you may be rate
+limited: set GITHUB_TOKEN to a personal access token and try again."
+
+tag=$(json_strings tag_name < "$release_json" | head -n 1)
+[ -n "$tag" ] || die "could not read the release tag from the GitHub API response"
+
+# Match the exact asset basename, not a loose substring of the URL.
+asset="${PROGRAM}_${tag}_${os}_${arch}"
+if [ "$os" = "windows" ]; then
+	asset="${asset}.exe"
+fi
+download_url=""
+for url in $(json_strings browser_download_url < "$release_json"); do
+	case $url in
+		*/"$asset") download_url=$url; break ;;
+	esac
+done
+
+if [ -z "$download_url" ]; then
+	die "release ${tag} has no asset named '${asset}'.
+Looked for: ${asset}
+Assets in ${tag}:
+$(json_strings browser_download_url < "$release_json" | sed -e 's|.*/|  |')
+Set NDDNS_ARCH or NDDNS_OS to override the detected platform (${os}/${arch}).
+Supported architectures: amd64, 386, arm64, armv7, armv6.
+Otherwise please open an issue at https://github.com/${REPO}/issues"
+fi
+
+say "Downloading ${download_url}"
+binary="${tmp_dir}/${PROGRAM}"
+curl -fL --retry 3 --retry-delay 1 -o "$binary" "$download_url" || die "failed to download ${download_url}.
+Try again, or download the binary manually from https://github.com/${REPO}/releases"
+
+# A failed download can still leave an HTML error page or a truncated file
+# behind, so check we are installing something binary-shaped.
+size=$(wc -c < "$binary" | tr -d '[:space:]')
+case $size in
+	'' | *[!0-9]*) die "could not read the size of the downloaded file" ;;
+esac
+[ "$size" -ge 1024 ] || die "the download is empty or truncated (${size} bytes), refusing to install it"
+[ "$(dd if="$binary" bs=1 count=1 2>/dev/null)" = "<" ] \
+	&& die "the download looks like an HTML page, not a ${PROGRAM} binary (proxy or rate limit?)"
+chmod +x "$binary" || die "could not make the downloaded binary executable"
+
+prefix=${PREFIX:-/usr/local}
+bindir="${DESTDIR:-}${prefix}/bin"
+say "Installing to ${bindir}/${PROGRAM}"
+if ! mkdir -p "$bindir" 2>/dev/null || ! cp "$binary" "${bindir}/${PROGRAM}" 2>/dev/null; then
+	die "could not install to ${bindir}/${PROGRAM}.
+Re-run this script with elevated privileges, for example:
+  curl -fsSL ${INSTALL_URL} | sudo sh
+Or install somewhere writable:
+  PREFIX=\"\$HOME/.local\" sh install.sh"
+fi
+chmod 755 "${bindir}/${PROGRAM}" 2>/dev/null || die "could not make ${bindir}/${PROGRAM} executable"
+
+say "Netlify Dynamic DNS installed to: ${bindir}/${PROGRAM}"
+case ":${PATH}:" in
+	*":${bindir}:"*) ;;
+	*) warn "${bindir} is not in your PATH; use the full path to run ${PROGRAM}" ;;
+esac
+say "Run '${PROGRAM} --version' to verify the installation."

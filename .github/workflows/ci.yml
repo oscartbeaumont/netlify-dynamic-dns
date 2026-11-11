@@ -5,20 +5,26 @@ name: CI
 
 on: [push, pull_request, workflow_dispatch]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7.0.0
+        uses: golangci/golangci-lint-action@v9.3.0
 
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7.0.1
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7.0.0
       - name: Go Installation Information
         run: go version
       - name: Build Binary
@@ -29,3 +35,21 @@ jobs:
       NDDNS_IPv6_ENABLED: false # Note: GitHub Actions does not yet support IPv6 so this has been disabled.
       NDDNS_TEST_ZONE: ${{ secrets.NDDNS_TEST_ZONE }}
       NDDNS_TEST_ACCESS_TOKEN: ${{ secrets.NDDNS_TEST_ACCESS_TOKEN }}
+
+  # Guard the installer that users pipe into `sh`. It must parse under dash
+  # (Debian / Raspberry Pi OS) and actually install a working binary.
+  install:
+    name: Installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Parse with dash
+        run: dash -n install.sh
+      - name: Parse with bash --posix
+        run: bash --posix -n install.sh
+      - name: Install into a temporary prefix
+        run: |
+          set -eux
+          NDDNS_OS=linux NDDNS_ARCH=amd64 PREFIX="$RUNNER_TEMP/prefix" sh ./install.sh
+          test -x "$RUNNER_TEMP/prefix/bin/nddns"
+          "$RUNNER_TEMP/prefix/bin/nddns" --version
