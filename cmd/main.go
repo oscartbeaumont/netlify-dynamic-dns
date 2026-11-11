@@ -11,11 +11,9 @@ import (
 	"github.com/alexflint/go-arg"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/strfmt"
-	"github.com/janeczku/go-spinner"
 	"github.com/netlify/open-api/go/models"
 	"github.com/netlify/open-api/go/plumbing/operations"
 	"github.com/netlify/open-api/go/porcelain"
-	"github.com/oscartbeaumont/netlify-dynamic-dns/internal/analytics"
 	"github.com/oscartbeaumont/netlify-dynamic-dns/internal/publicip"
 )
 
@@ -46,27 +44,10 @@ func main() {
 		args.recordHostname = args.Record + "." + args.Zone
 	}
 
-	var lastAnalyticsReport time.Time
 	var forBreak = true
 	for forBreak {
-		var analyticsChan = make(chan *struct{}, 1)
-		if lastAnalyticsReport.IsZero() || time.Since(lastAnalyticsReport) > time.Hour*24 {
-			go func() {
-				if err := analytics.Report(Version); err != nil {
-					fmt.Println(Red+"Error reporting anonymous analytics data: ", err, Reset)
-				} else {
-					lastAnalyticsReport = time.Now()
-				}
-
-				analyticsChan <- nil
-			}()
-		} else {
-			analyticsChan <- nil
-		}
-
-		s := spinner.StartNew("Updating DNS record")
+		s := startSpinner("Updating DNS record")
 		err := doUpdate()
-		<-analyticsChan
 		s.Stop()
 
 		if err != nil {
