@@ -41,7 +41,7 @@ go run ./cmd -accesstoken xxx -zone example.com -record home
 | record          | NDDNS_RECORD           | home        | The record in the DNS zone to set as your public IP                                                         |
 | ipv6            | NDDNS_IPv6_ENABLED     | true        | Whether the IPv6 record (AAAA) should also be updated                                                       |
 | interval        | NDDNS_INTERVAL         | 0           | The amount of minutes between sending updates. If 0 only a single update is done.                            |
-| ttl             | NDDNS_TTL              |             | The TTL in seconds for the DNS records (minimum 60). Defaults to the existing record's TTL, or the update interval when there is none. |
+| ttl             | NDDNS_TTL              |             | The TTL in seconds for the DNS records (between 60 and 86400). Defaults to the existing record's TTL, or the update interval when there is none. |
 | updaterootrecord| NDDNS_UPDATE_ROOT_RECORD | false     | Use to update the root record instead of a subdomain                                                        |
 
 `zone` and `record` are validated on startup: surrounding whitespace is trimmed, `zone` must be a bare
