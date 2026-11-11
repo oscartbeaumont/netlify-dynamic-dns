@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"golang.org/x/term"
 )
 
 // Reset sets the terminal back to the default color
@@ -17,10 +19,18 @@ var Red = "\033[31m"
 // Green sets the following text to green
 var Green = "\033[32m"
 
+// The spinner draws on stdout and the log lines go to stderr, so each stream is checked
+// separately. An ioctl is used rather than os.ModeCharDevice because the latter is also true for
+// /dev/null, which would fill logs with escape sequences and carriage returns.
+var (
+	stdoutIsTerminal = term.IsTerminal(int(os.Stdout.Fd()))
+	stderrIsTerminal = term.IsTerminal(int(os.Stderr.Fd()))
+)
+
 func init() {
 	// Windows doesn't support console color's so remove them, and pipes or service managers
 	// should not receive escape sequences either.
-	if runtime.GOOS == "windows" || !isTerminal {
+	if runtime.GOOS == "windows" || !stderrIsTerminal {
 		Reset = ""
 		Red = ""
 		Green = ""
@@ -30,19 +40,12 @@ func init() {
 	}
 }
 
-// isTerminal reports whether stdout is attached to a terminal. Output is only animated when
-// it is, so that piping the output to a file or a service manager stays readable.
-var isTerminal = func() bool {
-	info, err := os.Stdout.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}()
-
 const spinnerFrameRate = 120 * time.Millisecond
 
 var spinnerCharset = []string{"|", "/", "-", "\\"}
 
-// spinner is a tiny terminal spinner. It is a no-op when stdout is not a terminal, and it
-// always clears itself so log output is never interleaved with a half drawn frame.
+// spinner is a tiny terminal spinner. It is a no-op when stdout is not a terminal, and it always
+// clears itself so log output is never interleaved with a half drawn frame.
 type spinner struct {
 	once    sync.Once
 	done    chan struct{}
@@ -58,7 +61,7 @@ func startSpinner(msg string) *spinner {
 		msg:     msg,
 	}
 
-	if !isTerminal {
+	if !stdoutIsTerminal {
 		close(s.stopped)
 		return s
 	}

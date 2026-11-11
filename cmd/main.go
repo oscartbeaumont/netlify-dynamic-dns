@@ -55,6 +55,9 @@ func main() {
 	if args.Interval < 0 {
 		validation.Fail("Invalid --interval: must not be negative")
 	}
+	if args.Interval > maxIntervalMinutes {
+		validation.Fail(fmt.Sprintf("Invalid --interval: must be at most %d minutes", maxIntervalMinutes))
+	}
 
 	args.zoneID = strings.ReplaceAll(args.Zone, ".", "_")
 	if args.UpdateRootRecord {
@@ -141,6 +144,29 @@ func resolvePublicIPs(provider publicip.Provider, wantIPv6 bool) (publicIPs, err
 	return ips, nil
 }
 
+// recordsToCreate builds the records which publish ips. Both record types share the TTL rules,
+// and the TTL of the record being replaced is passed in so a value configured in the Netlify
+// dashboard survives.
+func recordsToCreate(ips publicIPs, hostname string, explicitTTL int64, existing []*models.DNSRecord, intervalMinutes int) []*models.DNSRecordCreate {
+	records := []*models.DNSRecordCreate{{
+		Hostname: hostname,
+		Type:     "A",
+		Value:    ips.ipv4,
+		TTL:      recordTTLFor(explicitTTL, existing, hostname, "A", intervalMinutes),
+	}}
+
+	if ips.ipv6 != "" {
+		records = append(records, &models.DNSRecordCreate{
+			Hostname: hostname,
+			Type:     "AAAA",
+			Value:    ips.ipv6,
+			TTL:      recordTTLFor(explicitTTL, existing, hostname, "AAAA", intervalMinutes),
+		})
+	}
+
+	return records
+}
+
 // doUpdate updates the DNS records with the public IP address. Problems that do not stop the
 // update are returned as warnings so they can be logged after the spinner has been cleared.
 func doUpdate() ([]string, error) {
@@ -161,13 +187,32 @@ func doUpdate() ([]string, error) {
 		return warnings, fmt.Errorf("error retrieving your records from Netlify DNS: %w", describeAPIError(err, "", "", ""))
 	}
 
-	// Delete every existing record for the hostname (Netlify DNS API has no update feature).
-	// Only touch the types being replaced so disabling IPv6 leaves any AAAA records alone.
+	// Only touch the types being replaced, so disabling IPv6 leaves any AAAA records alone.
+	var existing []*models.DNSRecord
 	for _, record := range recordsToDelete(resp.Payload, args.recordHostname) {
 		if record.Type == "AAAA" && !updateIPv6 {
 			continue
 		}
+		existing = append(existing, record)
+	}
 
+	// Netlify's DNS API cannot update a record in place, so the record is recreated. The new
+	// records are created before the old ones are deleted: if a create fails the hostname keeps
+	// serving its previous address instead of going blank. The duplicates this leaves behind are
+	// deleted below, or by the next update if that delete fails.
+	for _, record := range recordsToCreate(ips, args.recordHostname, args.TTL, resp.Payload, args.Interval) {
+		createparams := operations.NewCreateDNSRecordParams()
+		createparams.ZoneID = args.zoneID
+		createparams.DNSRecord = record
+		if _, err := netlify.Operations.CreateDNSRecord(createparams, netlifyAuth); err != nil {
+			if isUnauthorized(err) {
+				return warnings, unauthorizedError(args.Zone)
+			}
+			return warnings, fmt.Errorf("error creating new DNS record: %w", describeAPIError(err, record.Hostname, record.Type, ""))
+		}
+	}
+
+	for _, record := range existing {
 		deleteparams := operations.NewDeleteDNSRecordParams()
 		deleteparams.ZoneID = record.DNSZoneID
 		deleteparams.DNSRecordID = record.ID
@@ -175,43 +220,10 @@ func doUpdate() ([]string, error) {
 			if isUnauthorized(err) {
 				return warnings, unauthorizedError(args.Zone)
 			}
-			return warnings, fmt.Errorf("error deleting existing DNS record: %w", describeAPIError(err, record.Hostname, record.Type, record.ID))
-		}
-	}
-
-	ipv4Record := &models.DNSRecordCreate{
-		Hostname: args.recordHostname,
-		Type:     "A",
-		Value:    ips.ipv4,
-		TTL:      recordTTLFor(args.TTL, resp.Payload, args.recordHostname, "A", args.Interval),
-	}
-
-	createparams := operations.NewCreateDNSRecordParams()
-	createparams.ZoneID = args.zoneID
-	createparams.DNSRecord = ipv4Record
-	if _, err := netlify.Operations.CreateDNSRecord(createparams, netlifyAuth); err != nil {
-		if isUnauthorized(err) {
-			return warnings, unauthorizedError(args.Zone)
-		}
-		return warnings, fmt.Errorf("error creating new DNS record: %w", describeAPIError(err, ipv4Record.Hostname, ipv4Record.Type, ""))
-	}
-
-	if updateIPv6 {
-		ipv6Record := &models.DNSRecordCreate{
-			Hostname: args.recordHostname,
-			Type:     "AAAA",
-			Value:    ips.ipv6,
-			TTL:      recordTTLFor(args.TTL, resp.Payload, args.recordHostname, "AAAA", args.Interval),
-		}
-
-		create2params := operations.NewCreateDNSRecordParams()
-		create2params.ZoneID = args.zoneID
-		create2params.DNSRecord = ipv6Record
-		if _, err := netlify.Operations.CreateDNSRecord(create2params, netlifyAuth); err != nil {
-			if isUnauthorized(err) {
-				return warnings, unauthorizedError(args.Zone)
-			}
-			return warnings, fmt.Errorf("error creating new DNS record: %w", describeAPIError(err, ipv6Record.Hostname, ipv6Record.Type, ""))
+			// The new records are already live, so a failed delete is a duplicate record rather
+			// than a broken hostname (issue #18). It is retried by the next update.
+			warnings = append(warnings, "Warning: could not delete the old DNS record, it will be retried on the next update: "+
+				describeAPIError(err, record.Hostname, record.Type, record.ID).Error())
 		}
 	}
 

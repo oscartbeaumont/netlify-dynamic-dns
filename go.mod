@@ -8,6 +8,7 @@ require (
 	github.com/go-openapi/strfmt v0.27.4
 	github.com/miekg/dns v1.1.73
 	github.com/netlify/open-api v1.4.0
+	golang.org/x/term v0.48.0
 )
 
 require (

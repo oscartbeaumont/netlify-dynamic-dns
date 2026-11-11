@@ -22,6 +22,9 @@ func TestResolveTTL(t *testing.T) {
 		{name: "explicit wins over existing", explicit: 120, existing: 670, interval: 5, wantTTL: 120},
 		{name: "explicit minimum", explicit: 60, interval: 5, wantTTL: 60},
 		{name: "existing record wins", existing: 670, interval: 5, wantTTL: 670},
+		{name: "existing record at the minimum", existing: 60, interval: 5, wantTTL: 60},
+		{name: "existing record below the minimum is ignored", existing: 30, interval: 5, wantTTL: 300},
+		{name: "existing record above the maximum is ignored", existing: 90000, interval: 5, wantTTL: 300},
 		{name: "existing record with no TTL falls back", interval: 5, wantTTL: 300},
 		{name: "derived from interval", interval: 5, wantTTL: 300},
 		{name: "single update", interval: 0, wantTTL: 60},
@@ -198,6 +201,36 @@ func TestRecordsToDelete(t *testing.T) {
 	}
 	if got := recordsToDelete(nil, "home.example.com"); len(got) != 0 {
 		t.Fatalf("recordsToDelete for nil payload returned %v, want nothing", got)
+	}
+}
+
+func TestRecordsToCreate(t *testing.T) {
+	existing := []*models.DNSRecord{
+		{ID: "a1", Hostname: "home.example.com", Type: "A", TTL: 670},
+		{ID: "aaaa1", Hostname: "home.example.com", Type: "AAAA", TTL: 900},
+	}
+
+	records := recordsToCreate(
+		publicIPs{ipv4: "1.2.3.4", ipv6: "2001:db8::1"},
+		"home.example.com", 0, existing, 5,
+	)
+	if len(records) != 2 {
+		t.Fatalf("recordsToCreate returned %d records, want an A and an AAAA record", len(records))
+	}
+	if records[0].Type != "A" || records[0].Value != "1.2.3.4" || records[0].TTL != 670 {
+		t.Fatalf("A record = %+v, want the ipv4 address with the existing 670 TTL", records[0])
+	}
+	if records[1].Type != "AAAA" || records[1].Value != "2001:db8::1" || records[1].TTL != 900 {
+		t.Fatalf("AAAA record = %+v, want the ipv6 address with the existing 900 TTL", records[1])
+	}
+
+	// Without an IPv6 address only the A record is published, and an explicit TTL wins.
+	records = recordsToCreate(publicIPs{ipv4: "1.2.3.4"}, "home.example.com", 120, nil, 5)
+	if len(records) != 1 {
+		t.Fatalf("recordsToCreate returned %d records, want only an A record", len(records))
+	}
+	if records[0].Type != "A" || records[0].TTL != 120 {
+		t.Fatalf("A record = %+v, want the explicit 120 TTL", records[0])
 	}
 }
 

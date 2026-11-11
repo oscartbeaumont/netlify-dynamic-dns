@@ -3,8 +3,8 @@
 # Multi-arch image for Netlify Dynamic DNS.
 #
 # The builder stage always runs on the build platform ($BUILDPLATFORM) and
-# cross-compiles to the requested target, so building linux/amd64, linux/arm64
-# and linux/arm/v7 only needs QEMU for the final image assembly, not for Go.
+# cross-compiles to the requested target, so the Go toolchain never runs under
+# emulation when building linux/amd64, linux/arm64 and linux/arm/v7.
 
 FROM --platform=$BUILDPLATFORM golang:alpine AS builder
 

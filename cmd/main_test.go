@@ -162,6 +162,9 @@ func TestNormal(t *testing.T) {
 		if !strings.Contains(scanner.Text(), "successfully") {
 			t.Errorf("error running command: command didn't report success to terminal")
 		}
+		if err := cmd.Wait(); err != nil {
+			t.Errorf("error running command: %v", err)
+		}
 
 		getparams := operations.NewGetDNSRecordsParams()
 		getparams.ZoneID = args.zoneID
@@ -221,8 +224,12 @@ func TestNormal(t *testing.T) {
 
 		if !foundA {
 			t.Fatalf("error 'A' record was not found for domain '%v'", recordHostname)
-		} else if myIPv6 != "" && !foundAAAA {
+		}
+		if myIPv6 != "" && !foundAAAA {
 			t.Fatalf("error 'AAAA' record was not found for domain '%v'", recordHostname)
+		}
+		if myIPv6 == "" && recordName == "nddns-test-01" && !foundAAAA {
+			t.Fatalf("error existing 'AAAA' record was deleted while IPv6 updates are disabled")
 		}
 	}
 

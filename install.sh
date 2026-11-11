@@ -63,6 +63,9 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
+command -v curl >/dev/null 2>&1 || die "curl is required by this script but was not found.
+Install it with your package manager (for example 'apt-get install curl') and try again."
+
 os=$(detect_os) || exit 1
 arch=$(detect_arch) || exit 1
 
@@ -148,7 +151,7 @@ if ! mkdir -p "$bindir" 2>/dev/null || ! cp "$binary" "${bindir}/${PROGRAM}" 2>/
 Re-run this script with elevated privileges, for example:
   curl -fsSL ${INSTALL_URL} | sudo sh
 Or install somewhere writable:
-  PREFIX=\"\$HOME/.local\" sh install.sh"
+  curl -fsSL ${INSTALL_URL} | PREFIX=\"\$HOME/.local\" sh"
 fi
 chmod 755 "${bindir}/${PROGRAM}" 2>/dev/null || die "could not make ${bindir}/${PROGRAM} executable"
 

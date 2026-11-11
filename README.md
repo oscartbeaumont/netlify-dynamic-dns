@@ -57,9 +57,9 @@ overrides both.
 
 ## How It Works
 
-Netlify Dynamic DNS uses the [OpenDNS](https://www.opendns.com) resolver to determine your public IP. The resolver has a feature which echoes the clients IP address when you lookup `myip.opendns.com`. This lookup is done both over IPv4 and IPv6 to determine both public IP's then using the [Netlify OpenAPI Client](https://github.com/netlify/open-api) the old DNS records are removed and new ones are created with your latest public IP.
+Netlify Dynamic DNS uses the [OpenDNS](https://www.opendns.com) resolver to determine your public IP. The resolver has a feature which echoes the clients IP address when you lookup `myip.opendns.com`. This lookup is done both over IPv4 and IPv6 to determine both public IP's then using the [Netlify OpenAPI Client](https://github.com/netlify/open-api) new DNS records are created with your latest public IP and the old ones are removed.
 
-Because Netlify's DNS API cannot update a record in place, every update deletes the existing records for the hostname and creates new ones. All records for the hostname are removed, so stale duplicates left behind by an interrupted update are cleaned up rather than accumulating.
+Because Netlify's DNS API cannot update a record in place, every update recreates the records. The new records are created before the old ones are deleted, so the hostname keeps resolving to the previous address if a create fails. Every record for the hostname is deleted afterwards, so stale duplicates left behind by an interrupted update are cleaned up rather than accumulating.
 
 If the IPv6 lookup fails (the machine has no IPv6 connectivity) the update continues and only the IPv4 record is published. Pass `--ipv6=false` to skip the lookup entirely.
 

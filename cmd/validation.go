@@ -3,7 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
+	"time"
 )
 
 // Netlify accepts TTLs between 60 seconds and one day.
@@ -11,6 +13,10 @@ const (
 	minTTL int64 = 60
 	maxTTL int64 = 86400
 )
+
+// maxIntervalMinutes is the largest --interval whose duration still fits in a time.Duration.
+// Without the bound a huge value would overflow and turn the update loop into a busy loop.
+const maxIntervalMinutes = int(math.MaxInt64 / int64(time.Minute))
 
 // trimInputs removes surrounding whitespace from the user supplied values. A leading space in
 // the zone produces an invalid Netlify zone id, so it is better to tolerate it than to leave
@@ -81,7 +87,9 @@ func resolveTTL(explicit int64, existingTTL int64, intervalMinutes int) int64 {
 	if explicit != 0 {
 		return explicit
 	}
-	if existingTTL > 0 {
+	// A TTL outside Netlify's range would be rejected when the record is recreated, so it is
+	// treated as if the record had none.
+	if existingTTL >= minTTL && existingTTL <= maxTTL {
 		return existingTTL
 	}
 
