@@ -15,7 +15,7 @@
 ```bash
 # Install via script (Linux and macOS, x86 and ARM). Set PREFIX to install somewhere
 # other than /usr/local, or NDDNS_VERSION=v3.0.3 to pin a release.
-curl -fsSL https://raw.githubusercontent.com/oscartbeaumont/netlify-dynamic-dns/master/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/oscartbeaumont/netlify-dynamic-dns/main/install.sh | sudo sh
 
 # Set home.example.com to your public IP and quit
 nddns -accesstoken xxx -zone example.com -record home
