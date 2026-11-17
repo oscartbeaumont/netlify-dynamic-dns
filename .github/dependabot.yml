@@ -1,17 +1,22 @@
-
 version: 2
+
+multi-ecosystem-groups:
+  netlify-dynamic-dns-deps:
+    schedule:
+      interval: "daily"
+
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
-    schedule:
-      interval: "daily"
+    multi-ecosystem-group: "netlify-dynamic-dns-deps"
+    patterns: ["*"]
 
   - package-ecosystem: "gomod"
     directory: "/"
-    schedule:
-      interval: "daily"
-      
+    multi-ecosystem-group: "netlify-dynamic-dns-deps"
+    patterns: ["*"]
+
   - package-ecosystem: "docker"
     directory: "/"
-    schedule:
-      interval: "daily"
+    multi-ecosystem-group: "netlify-dynamic-dns-deps"
+    patterns: ["*"]
